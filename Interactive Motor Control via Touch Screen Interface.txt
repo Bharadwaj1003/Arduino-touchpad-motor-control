@@ -1,0 +1,249 @@
+CAM PROJECT  ROBOTIC SPIDER
+
+
+
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <SPI.h>       // this is needed for display
+#include <Adafruit_ILI9341.h>
+#include <Arduino.h>      // this is needed for FT6206
+#include <Adafruit_FT6206.h>
+#include <Wire.h>
+#include <AccelStepper.h>
+// The FT6206 uses hardware I2C (SCL/SDA)
+Adafruit_FT6206 ctp = Adafruit_FT6206();
+
+// // The display also uses hardware SPI, plus #9 & #10
+// #define TFT_CS 10
+// #define TFT_DC 9
+#define TFT_DC 8
+#define TFT_CS 10
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
+
+const int dirPin = 2;
+const int stepPin = 3;
+
+// Size of the color selection boxes and the paintbrush size
+#define BOXSIZE 120
+#define SLIDERHEIGHT 10
+#define SLIDERWIDTH 200
+#define BUTTON_TEXT_COLOR ILI9341_WHITE
+#define BUTTON_TEXT_COLOR_CLICKED ILI9341_BLACK
+#define BUTTON_TEXT_SIZE 2
+int oldcolor, currentcolor;
+String label = "Clock";
+String label1 = "AClock";
+
+AccelStepper stepper1(1, 2, 5); // (Type of driver: with 2 pins, STEP, DIR)
+
+void setup(void) {
+	pinMode(stepPin, OUTPUT);
+	pinMode(dirPin, OUTPUT);
+  // Set maximum speed value for the stepper
+  stepper1.setMaxSpeed(3000);
+
+  //while (!Serial);     // used for leonardo debugging
+
+  Serial.begin(115200);
+  Serial.println(F("Cap Touch Paint!"));
+  
+  //Wire.setPins(5, 4); // redefine first I2C port to be on pins 10/8
+  tft.begin();
+
+  if (! ctp.begin(40)) {  // pass in 'sensitivity' coefficient
+    Serial.println("Couldn't start FT6206 touchscreen controller");
+    while (1);
+  }
+
+  Serial.println("Capacitive touchscreen started");
+  
+  tft.fillScreen(ILI9341_BLACK);
+  
+  // make the color selection boxes
+  tft.fillRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_GREEN);
+  tft.setCursor((BOXSIZE - (BUTTON_TEXT_SIZE * 6 * label.length())) / 2, (BOXSIZE - (BUTTON_TEXT_SIZE * 8)) / 2);
+  tft.setTextSize(BUTTON_TEXT_SIZE);
+  tft.setTextColor(BUTTON_TEXT_COLOR);
+  tft.print(label);
+
+  tft.fillRect(120, 0, BOXSIZE, BOXSIZE, ILI9341_RED);
+  tft.setCursor(120 + (BOXSIZE - (BUTTON_TEXT_SIZE * 6 * label1.length())) / 2, (BOXSIZE - (BUTTON_TEXT_SIZE * 8)) / 2);
+  tft.setTextSize(BUTTON_TEXT_SIZE);
+  tft.setTextColor(BUTTON_TEXT_COLOR);
+  tft.print(label1);
+  // select the current color 'red'
+  tft.drawRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
+  tft.drawRect(120, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
+  currentcolor = ILI9341_RED;
+
+  // slider
+  tft.drawRect(20,235, SLIDERWIDTH, SLIDERHEIGHT, ILI9341_WHITE);
+  tft.fillRect(18,230, 4,SLIDERHEIGHT+10, ILI9341_GREEN);
+  tft.drawRect(20,160,80,40,ILI9341_WHITE);
+  tft.setCursor(20 + (80-(BUTTON_TEXT_SIZE*6*5))/2,125+(40-(BUTTON_TEXT_SIZE*8))/2);
+  tft.setTextSize(BUTTON_TEXT_SIZE);
+  tft.setTextColor(BUTTON_TEXT_COLOR);
+  tft.println("ANGLE");
+
+  tft.fillRect(140,160,80,40,ILI9341_BLUE);
+  tft.setCursor(140 + (80-(BUTTON_TEXT_SIZE*6*3))/2,160+(40-(BUTTON_TEXT_SIZE*8))/2);
+  tft.setTextSize(BUTTON_TEXT_SIZE);
+  tft.setTextColor(BUTTON_TEXT_COLOR);
+  tft.println("RUN");
+
+  tft.setCursor(20 + (80-(BUTTON_TEXT_SIZE*6*6))/2,280+(40-(BUTTON_TEXT_SIZE*8))/2);
+  tft.setTextSize(BUTTON_TEXT_SIZE);
+  tft.setTextColor(BUTTON_TEXT_COLOR);
+  tft.println("SPEED:");
+
+
+  
+  tft.drawRect(140,280,80,40,ILI9341_WHITE);
+  
+}
+
+void loop() {
+
+  int speed = map(analogRead(A0),0,1023,0,3000);
+  String vel = String(speed);
+  int steps = 0;
+  
+
+  
+  // Wait for a touch
+  if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+ /*
+  // Print out raw data from screen touch controller
+  Serial.print("X = "); Serial.print(p.x);
+  Serial.print("\tY = "); Serial.print(p.y);
+  Serial.print(" -> ");
+ */
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+
+  // Print out the remapped (rotated) coordinates
+  Serial.print("("); Serial.print(p.x);
+  Serial.print(", "); Serial.print(p.y);
+  Serial.println(")");
+  
+
+  if (p.y < 0 + BOXSIZE && p.y > 0) {
+
+     if (p.x < 0 + BOXSIZE && p.x > 0) { 
+
+      tft.fillRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_GREEN);
+      tft.setCursor((BOXSIZE - (BUTTON_TEXT_SIZE * 6 * label.length())) / 2, (BOXSIZE - (BUTTON_TEXT_SIZE * 8)) / 2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR_CLICKED);
+      tft.print(label);
+
+      tft.fillRect(120, 0, BOXSIZE, BOXSIZE, ILI9341_RED);
+      tft.setCursor(120 + (BOXSIZE - (BUTTON_TEXT_SIZE * 6 * label1.length())) / 2, (BOXSIZE - (BUTTON_TEXT_SIZE * 8)) / 2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.print(label1);
+
+      stepper1.setSpeed((speed));
+
+      tft.fillRect(140,280,80,40,ILI9341_BLACK);
+      tft.setCursor(140 + (80-(BUTTON_TEXT_SIZE*6*6))/2,280+(40-(BUTTON_TEXT_SIZE*8))/2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.print(vel);
+
+     } 
+
+  }
+  if (p.y < 0 + BOXSIZE && p.y > 0) {
+
+     if (p.x < 120 + BOXSIZE && p.x > 120) { 
+      tft.fillRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_RED);
+      tft.setCursor((BOXSIZE - (BUTTON_TEXT_SIZE * 6 * label.length())) / 2, (BOXSIZE - (BUTTON_TEXT_SIZE * 8)) / 2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.print(label);
+
+      tft.fillRect(120, 0, BOXSIZE, BOXSIZE, ILI9341_GREEN);
+      tft.setCursor(120 + (BOXSIZE - (BUTTON_TEXT_SIZE * 6 * label1.length())) / 2, (BOXSIZE - (BUTTON_TEXT_SIZE * 8)) / 2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR_CLICKED);
+      tft.print(label1);
+
+      stepper1.setSpeed((-speed));
+      // Step the motor with a constant speed previously set by setSpeed();
+
+      tft.fillRect(140,280,80,40,ILI9341_BLACK);
+      tft.setCursor(140 + (80-(BUTTON_TEXT_SIZE*6*6))/2,280+(40-(BUTTON_TEXT_SIZE*8))/2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.print(vel);
+      
+      
+     } 
+
+  }
+  
+  stepper1.runSpeed();
+  
+
+  if (p.y < 235 + SLIDERHEIGHT && p.y > 235) {
+
+      if (p.x < 20 + SLIDERWIDTH && p.x > 20) {
+      tft.fillRect(0,120,240,240,ILI9341_BLACK); 
+      tft.drawRect(20,235, SLIDERWIDTH, SLIDERHEIGHT, ILI9341_WHITE);
+      tft.fillRect(p.x-2,230, 4,SLIDERHEIGHT+10, ILI9341_GREEN);
+
+      int rotation = map(p.x,20,220,0,360);
+      String angle = String(rotation);
+      tft.drawRect(20,160,80,40,ILI9341_WHITE);
+      tft.setCursor(20 + (80-(BUTTON_TEXT_SIZE*6*angle.length()))/2,160+(40-(BUTTON_TEXT_SIZE*8))/2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.print(angle);
+
+      int steps = map(p.x,20,220,0,200);
+      stepper1.setSpeed((speed));
+      stepper1.move(steps);
+      stepper1.runToPosition();
+      
+
+
+
+
+      tft.drawRect(20,235, SLIDERWIDTH, SLIDERHEIGHT, ILI9341_WHITE);
+      
+      tft.drawRect(20,160,80,40,ILI9341_WHITE);
+      tft.setCursor(20 + (80-(BUTTON_TEXT_SIZE*6*5))/2,125+(40-(BUTTON_TEXT_SIZE*8))/2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.println("ANGLE");
+
+      tft.fillRect(140,160,80,40,ILI9341_BLUE);
+      tft.setCursor(140 + (80-(BUTTON_TEXT_SIZE*6*3))/2,160+(40-(BUTTON_TEXT_SIZE*8))/2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.println("RUN");
+
+      tft.setCursor(20 + (80-(BUTTON_TEXT_SIZE*6*6))/2,280+(40-(BUTTON_TEXT_SIZE*8))/2);
+      tft.setTextSize(BUTTON_TEXT_SIZE);
+      tft.setTextColor(BUTTON_TEXT_COLOR);
+      tft.println("SPEED:");
+
+
+      
+      tft.drawRect(140,280,80,40,ILI9341_WHITE);
+      } 
+
+  }
+
+  
+  
+  
+}
